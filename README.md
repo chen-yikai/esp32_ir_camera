@@ -13,6 +13,9 @@ An ESP32-S3 with an MLX90640 thermal camera (32×24 pixels) that:
 
 - **Live thermal view**: iron color palette, interpolation, mirror, auto or manual range,
   temperature under the cursor, min/max/center readouts, and °C/°F.
+- **Hot object boxes**: anything hotter than the trigger temperature gets a cyan box with its
+  peak temperature and a dot on its hottest pixel, so hot objects are easy to spot. Touching
+  hot pixels are grouped into one box; the hottest object's box is drawn thicker (up to 5 boxes).
 - **Left/right haptics**: each half works on its own, so both motors can vibrate at once.
 - **Proximity-scaled strength**: the camera can't measure distance, so closeness is estimated
   from two signs:
@@ -136,7 +139,7 @@ All pins can be changed in the `User config` section of the sketch.
 | Motor cards | Status badge, intensity %, peak temperature and hot-pixel count per half, and an **Enabled** switch. |
 | Vibration trigger | Slider or number box (25–150 °C). Applied immediately and saved on the device. |
 | Stats | Center, min, max, cursor temperature, and which motors are active. |
-| Display settings | Mirror, interpolate, °F, auto range, smoothing. These only change the page, not the motors. |
+| Display settings | Mirror, interpolate, hot boxes, °F, auto range, smoothing. These only change the page, not the motors. |
 
 ## Configuration (`User config` in the sketch)
 

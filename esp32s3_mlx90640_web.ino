@@ -273,6 +273,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     <div class="card-content controls">
       <label><input type="checkbox" id="mirror" checked> Mirror</label>
       <label><input type="checkbox" id="interp" checked> Interpolate</label>
+      <label><input type="checkbox" id="hotbox" checked> Hot boxes</label>
       <label><input type="checkbox" id="fahr"> °F</label>
       <label><input type="checkbox" id="auto" checked> Auto range</label>
       <label>Min <input type="number" id="rmin" value="20"></label>
@@ -422,8 +423,59 @@ function onFrame(buf) {
   frames++;
   const now = performance.now();
   if (now - fpsT >= 1000) { $('fps').textContent = (frames * 1000 / (now - fpsT)).toFixed(1); frames = 0; fpsT = now; }
+  findHotBoxes();
   dirty = true;
 }
+
+// ---- Hot object boxes: pixels above the trigger, grouped into 8-connected blobs ----
+let boxes = [];
+const seen = new Uint8Array(N);
+function findHotBoxes() {
+  boxes = [];
+  seen.fill(0);
+  const stack = [];
+  for (let s = 0; s < N; s++) {
+    if (seen[s] || temps[s] <= hotC) continue;
+    const b = { x0: W, y0: H, x1: -1, y1: -1, n: 0, peak: -1e9, px: 0, py: 0 };
+    seen[s] = 1; stack.push(s);
+    while (stack.length) {
+      const i = stack.pop(), x = i % W, y = (i / W) | 0;
+      b.n++;
+      b.x0 = Math.min(b.x0, x); b.x1 = Math.max(b.x1, x);
+      b.y0 = Math.min(b.y0, y); b.y1 = Math.max(b.y1, y);
+      if (temps[i] > b.peak) { b.peak = temps[i]; b.px = x; b.py = y; }
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx, ny = y + dy, j = ny * W + nx;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H || seen[j] || temps[j] <= hotC) continue;
+        seen[j] = 1; stack.push(j);
+      }
+    }
+    boxes.push(b);
+  }
+  boxes.sort((a, b) => b.peak - a.peak);   // hottest first
+}
+function drawBoxes() {
+  const sx = cv.width / W, sy = cv.height / H, mir = $('mirror').checked;
+  ctx.font = '600 15px ui-sans-serif, system-ui, sans-serif';
+  ctx.textBaseline = 'top';
+  boxes.slice(0, 5).forEach((b, k) => {
+    const w = (b.x1 - b.x0 + 1) * sx, h = (b.y1 - b.y0 + 1) * sy, y = b.y0 * sy;
+    const x = mir ? cv.width - b.x0 * sx - w : b.x0 * sx;
+    const col = k ? 'rgba(0,229,255,.75)' : '#00e5ff';
+    ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.strokeRect(x, y, w, h);
+    ctx.lineWidth = k ? 2 : 3; ctx.strokeStyle = col; ctx.strokeRect(x, y, w, h);
+    // Peak marker
+    const px = ((mir ? W - 1 - b.px : b.px) + 0.5) * sx, py = (b.py + 0.5) * sy;
+    ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill();
+    // Label above the box, else below, else inside
+    const label = fmt(b.peak), tw = ctx.measureText(label).width + 10, th = 20;
+    const ly = y >= th + 2 ? y - th - 2 : y + h + th + 2 <= cv.height ? y + h + 2 : y + 2;
+    const lx = Math.min(Math.max(x, 0), cv.width - tw);
+    ctx.fillStyle = col; ctx.fillRect(lx, ly, tw, th);
+    ctx.fillStyle = '#000'; ctx.fillText(label, lx + 5, ly + 3);
+  });
+}
+$('hotbox').addEventListener('change', () => { dirty = true; });
 
 function draw() {
   if (dirty) {
@@ -441,6 +493,7 @@ function draw() {
     if ($('mirror').checked) { ctx.translate(cv.width, 0); ctx.scale(-1, 1); }
     ctx.drawImage(small, 0, 0, cv.width, cv.height);   // GPU-scaled
     ctx.restore();
+    if ($('hotbox').checked) drawBoxes();
   }
   requestAnimationFrame(draw);
 }
